@@ -2,220 +2,138 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>PingoVerso 3D</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PingoVerso</title>
   <style>
-    body, html { margin:0; height:100%; display:flex; flex-direction: column; font-family: Arial, sans-serif; }
-    #container { flex: 1; background: #a1d3ff; position: relative; }
-    #chat {
-      width: 300px; height: 400px; border: 1px solid #ccc; background: white;
-      position: absolute; right: 20px; bottom: 20px; display: flex; flex-direction: column;
-      padding: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.2);
-    }
-    #messages {
-      flex: 1; overflow-y: auto; margin-bottom: 10px; border: 1px solid #ddd; padding: 5px;
-    }
-    #inputMessage {
-      width: 100%; box-sizing: border-box; padding: 5px;
-    }
-    #register {
-      padding: 10px; background: #eee; border-bottom: 1px solid #ccc;
-      display: flex; gap: 10px;
-    }
-    #register input {
-      padding: 5px;
-    }
-    #register button {
-      padding: 5px 10px;
-      cursor: pointer;
-    }
-    #status {
-      color: red; margin-left: 10px;
-    }
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    #container { width: 100%; height: 100%; position: relative; }
+    #chat, #register { position: absolute; background: white; z-index: 1; padding: 10px; border: 1px solid #ccc; }
+    #chat { bottom: 10px; right: 10px; width: 250px; height: 300px; display: flex; flex-direction: column; }
+    #messages { flex: 1; overflow-y: auto; border: 1px solid #ddd; padding: 5px; }
+    #inputMessage { padding: 5px; width: 100%; box-sizing: border-box; }
+    #register { top: 10px; left: 10px; display: flex; gap: 5px; }
   </style>
 </head>
 <body>
-
+  <div id="container"></div>
   <div id="register">
-    <input type="text" id="username" placeholder="Usuário" />
-    <input type="password" id="password" placeholder="Senha" />
+    <input id="username" placeholder="Usuário" />
+    <input id="password" placeholder="Senha" type="password" />
     <button id="btnRegister">Registrar</button>
     <span id="status"></span>
   </div>
-
-  <div id="container"></div>
-
   <div id="chat">
     <div id="messages"></div>
-    <input type="text" id="inputMessage" placeholder="Digite sua mensagem..." />
+    <input id="inputMessage" placeholder="Digite mensagem..." />
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
-<script src="/socket.io/socket.io.js"></script>
-<script>
-  // Backend Socket.io connection
-  const socket = io();
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
 
-  // Chat
-  const messages = document.getElementById('messages');
-  const inputMessage = document.getElementById('inputMessage');
+    const messages = document.getElementById('messages');
+    const input = document.getElementById('inputMessage');
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && input.value) {
+        socket.emit('sendMessage', input.value);
+        input.value = '';
+      }
+    });
+    socket.on('receiveMessage', msg => {
+      const el = document.createElement('div');
+      el.textContent = msg;
+      messages.appendChild(el);
+      messages.scrollTop = messages.scrollHeight;
+    });
 
-  inputMessage.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && inputMessage.value.trim()) {
-      socket.emit('sendMessage', inputMessage.value.trim());
-      inputMessage.value = '';
-    }
-  });
-
-  socket.on('receiveMessage', msg => {
-    const el = document.createElement('div');
-    el.textContent = msg;
-    messages.appendChild(el);
-    messages.scrollTop = messages.scrollHeight;
-  });
-
-  // Registro
-  const btnRegister = document.getElementById('btnRegister');
-  const usernameInput = document.getElementById('username');
-  const passwordInput = document.getElementById('password');
-  const statusSpan = document.getElementById('status');
-
-  btnRegister.onclick = async () => {
-    const username = usernameInput.value.trim();
-    const password = passwordInput.value.trim();
-    if (!username || !password) {
-      statusSpan.textContent = 'Preencha username e senha!';
-      return;
-    }
-    try {
+    // Registro
+    document.getElementById('btnRegister').onclick = async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
       const res = await fetch('/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
       const data = await res.json();
-      if(data.success) {
-        statusSpan.style.color = 'green';
-        statusSpan.textContent = 'Registrado com sucesso!';
-      } else {
-        statusSpan.style.color = 'red';
-        statusSpan.textContent = data.error || 'Erro no registro';
-      }
-    } catch(e) {
-      statusSpan.style.color = 'red';
-      statusSpan.textContent = 'Erro ao conectar ao servidor';
-    }
-  };
+      document.getElementById('status').textContent = data.success ? 'Registrado!' : data.error;
+    };
 
-  // Three.js Pinguim 3D
-  const container = document.getElementById('container');
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-  const renderer = new THREE.WebGLRenderer({antialias:true});
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  container.appendChild(renderer.domElement);
-
-  // Luz
-  const light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(0, 10, 10);
-  scene.add(light);
-
-  // Pinguim básico (corpo + cabeça)
-  const group = new THREE.Group();
-
-  const bodyGeometry = new THREE.SphereGeometry(1.5, 32, 32);
-  const bodyMaterial = new THREE.MeshStandardMaterial({color: 0x000000});
-  const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-  group.add(body);
-
-  const bellyGeometry = new THREE.CircleGeometry(1, 32);
-  const bellyMaterial = new THREE.MeshStandardMaterial({color: 0xffffff});
-  const belly = new THREE.Mesh(bellyGeometry, bellyMaterial);
-  belly.position.set(0, -0.2, 1.45);
-  belly.rotation.x = -Math.PI / 2;
-  group.add(belly);
-
-  const headGeometry = new THREE.SphereGeometry(0.8, 32, 32);
-  const headMaterial = new THREE.MeshStandardMaterial({color: 0x000000});
-  const head = new THREE.Mesh(headGeometry, headMaterial);
-  head.position.set(0, 1.7, 0);
-  group.add(head);
-
-  const faceGeometry = new THREE.CircleGeometry(0.7, 32);
-  const faceMaterial = new THREE.MeshStandardMaterial({color: 0xffffff});
-  const face = new THREE.Mesh(faceGeometry, faceMaterial);
-  face.position.set(0, 1.7, 0.7);
-  face.rotation.x = -Math.PI / 2;
-  group.add(face);
-
-  // Olhos simples
-  const eyeGeometry = new THREE.CircleGeometry(0.15, 32);
-  const eyeMaterial = new THREE.MeshStandardMaterial({color: 0x000000});
-  const eyeLeft = new THREE.Mesh(eyeGeometry, eyeMaterial);
-  eyeLeft.position.set(-0.3, 1.85, 1.1);
-  group.add(eyeLeft);
-
-  const eyeRight = new THREE.Mesh(eyeGeometry, eyeMaterial);
-  eyeRight.position.set(0.3, 1.85, 1.1);
-  group.add(eyeRight);
-
-  // Beak
-  const beakGeometry = new THREE.ConeGeometry(0.2, 0.5, 32);
-  const beakMaterial = new THREE.MeshStandardMaterial({color: 0xffa500});
-  const beak = new THREE.Mesh(beakGeometry, beakMaterial);
-  beak.position.set(0, 1.55, 1.3);
-  beak.rotation.x = Math.PI / 2;
-  group.add(beak);
-
-  scene.add(group);
-
-  camera.position.z = 7;
-  camera.position.y = 2;
-
-  // Para movimento
-  let targetPos = null;
-
-  container.addEventListener('click', e => {
-    // Calcula posição clicada no plano do pinguim (XY)
-    const rect = container.getBoundingClientRect();
-    const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const mouseY = - ((e.clientY - rect.top) / rect.height) * 2 + 1;
-
-    const vector = new THREE.Vector3(mouseX, mouseY, 0.5);
-    vector.unproject(camera);
-
-    const dir = vector.sub(camera.position).normalize();
-    const distance = (group.position.z - camera.position.z) / dir.z;
-    const pos = camera.position.clone().add(dir.multiplyScalar(distance));
-    targetPos = new THREE.Vector3(pos.x, group.position.y, pos.z);
-  });
-
-  function animate() {
-    requestAnimationFrame(animate);
-
-    if(targetPos) {
-      const speed = 0.05;
-      group.position.lerp(targetPos, speed);
-      // Rotaciona para frente do movimento
-      const dir = targetPos.clone().sub(group.position);
-      if(dir.length() > 0.01){
-        group.rotation.y = Math.atan2(dir.x, dir.z);
-      }
-      if(group.position.distanceTo(targetPos) < 0.01) {
-        targetPos = null;
-      }
-    }
-
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  // Responsividade
-  window.addEventListener('resize', () => {
-    camera.aspect = container.clientWidth / container.clientHeight;
-    camera.updateProjectionMatrix();
+    // Pinguim
+    const container = document.getElementById('container');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
     renderer.setSize(container.clientWidth, container.clientHeight);
-  });
-</script>
+    container.appendChild(renderer.domElement);
 
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(0, 10, 10);
+    scene.add(light);
+
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), new THREE.MeshStandardMaterial({color: 0x000000}));
+    group.add(body);
+
+    const belly = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshStandardMaterial({color: 0xffffff}));
+    belly.position.set(0, -0.2, 1.45);
+    belly.rotation.x = -Math.PI / 2;
+    group.add(belly);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), new THREE.MeshStandardMaterial({color: 0x000000}));
+    head.position.set(0, 1.7, 0);
+    group.add(head);
+
+    const face = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32), new THREE.MeshStandardMaterial({color: 0xffffff}));
+    face.position.set(0, 1.7, 0.7);
+    face.rotation.x = -Math.PI / 2;
+    group.add(face);
+
+    const eye = new THREE.Mesh(new THREE.CircleGeometry(0.15, 32), new THREE.MeshStandardMaterial({color: 0x000000}));
+    eye.position.set(-0.3, 1.85, 1.1);
+    group.add(eye);
+
+    const eye2 = eye.clone();
+    eye2.position.x = 0.3;
+    group.add(eye2);
+
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 32), new THREE.MeshStandardMaterial({color: 0xffa500}));
+    beak.position.set(0, 1.55, 1.3);
+    beak.rotation.x = Math.PI / 2;
+    group.add(beak);
+
+    scene.add(group);
+    camera.position.set(0, 2, 7);
+
+    let target = null;
+    container.addEventListener('click', e => {
+      const rect = container.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(mouse, camera);
+      const point = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(10));
+      target = new THREE.Vector3(point.x, group.position.y, point.z);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (target) {
+        group.position.lerp(target, 0.05);
+        const dir = target.clone().sub(group.position);
+        if (dir.length() > 0.01) {
+          group.rotation.y = Math.atan2(dir.x, dir.z);
+        }
+        if (group.position.distanceTo(target) < 0.05) {
+          target = null;
+        }
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
 </body>
 </html>
