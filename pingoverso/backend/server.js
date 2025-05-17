@@ -1,70 +1,54 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
+const http = require('http');
+const socketio = require('socket.io');
 const fs = require('fs');
 const path = require('path');
-
 const app = express();
-const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
+const io = socketio(server);
 
-// Middlewares
-app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve arquivos estáticos do frontend
-app.use(express.static(path.join(__dirname, '../frontend')));
+const USERS_FILE = path.join(__dirname, 'users.json');
 
-const usersFile = path.join(__dirname, 'users.json');
-const pufflesFile = path.join(__dirname, 'puffles.json');
-
-function readJSON(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch (err) {
-    return [];
-  }
+// Função para ler usuários
+function getUsers() {
+  if (!fs.existsSync(USERS_FILE)) return [];
+  const data = fs.readFileSync(USERS_FILE);
+  return JSON.parse(data);
 }
 
-function writeJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+// Função para salvar usuários
+function saveUsers(users) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
-// Endpoint para login
-app.post('/login', (req, res) => {
+// Rota de registro
+app.post('/register', (req, res) => {
   const { username, password } = req.body;
-  const users = readJSON(usersFile);
-  const user = users.find(u => u.username === username && u.password === password);
-  if (user) {
-    res.json({ success: true, message: 'Login bem-sucedido!' });
-  } else {
-    res.status(401).json({ success: false, message: 'Usuário ou senha inválidos.' });
+  if (!username || !password) return res.status(400).json({ error: 'Preencha username e password' });
+  let users = getUsers();
+  if (users.find(u => u.username === username)) {
+    return res.status(400).json({ error: 'Usuário já existe' });
   }
+  users.push({ username, password });
+  saveUsers(users);
+  res.json({ success: true });
 });
 
-// Pega puffles do usuário
-app.get('/puffles/:username', (req, res) => {
-  const puffles = readJSON(pufflesFile);
-  const userPuffles = puffles.filter(p => p.owner === req.params.username);
-  res.json(userPuffles);
+// Socket.io para chat em tempo real
+io.on('connection', socket => {
+  console.log('Novo usuário conectado:', socket.id);
+
+  socket.on('sendMessage', message => {
+    io.emit('receiveMessage', message); // Envia para todos
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Usuário desconectado:', socket.id);
+  });
 });
 
-// Adiciona novo puffle
-app.post('/puffles', (req, res) => {
-  const { owner, name, color } = req.body;
-  if (!owner || !name || !color) {
-    return res.status(400).json({ success: false, message: 'Dados incompletos.' });
-  }
-  let puffles = readJSON(pufflesFile);
-  puffles.push({ owner, name, color });
-  writeJSON(pufflesFile, puffles);
-  res.json({ success: true, message: 'Puffle adicionado!' });
-});
-
-// Para qualquer rota que não seja API, retorna index.html (frontend SPA)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
