@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Meus Puffles - PingoVerso</title>
+</head>
+<body>
+  <h2>Meus Puffles</h2>
+  <p>Olá, <span id="userDisplay"></span>!</p>
+  <ul id="listaPuffles"></ul>
+
+  <h3>Adicionar novo puffle</h3>
+  <form id="addPuffleForm">
+    <input type="text" id="puffleName" placeholder="Nome do puffle" required />
+    <input type="text" id="puffleColor" placeholder="Cor do puffle" required />
+    <button type="submit">Adicionar</button>
+  </form>
+
+  <script>
+    const user = localStorage.getItem('username');
+    if (!user) {
+      alert('Você precisa fazer login primeiro!');
+      window.location.href = 'login.html';
+    } else {
+      document.getElementById('userDisplay').textContent = user;
+      carregarPuffles();
+    }
+
+    async function carregarPuffles() {
+      const res = await fetch(`/puffles/${user}`);
+      const puffles = await res.json();
+      const lista = document.getElementById('listaPuffles');
+      lista.innerHTML = '';
+      puffles.forEach(p => {
+        const li = document.createElement('li');
+        li.textContent = `Nome: ${p.name} | Cor: ${p.color}`;
+        lista.appendChild(li);
+      });
+    }
+
+    document.getElementById('addPuffleForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const name = document.getElementById('puffleName').value;
+      const color = document.getElementById('puffleColor').value;
+
+      const res = await fetch('/puffles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner: user, name, color }),
+      });
+      const data = await res.json();
+
+      alert(data.message);
+      if (data.success) {
+        carregarPuffles();
+        document.getElementById('puffleName').value = '';
+        document.getElementById('puffleColor').value = '';
+      }
+    });
+  </script>
+</body>
+</html>
